@@ -14,8 +14,6 @@ const kafka = new Kafka({
 
 const consumer = kafka.consumer({
   groupId: 'test-group',
-  // Disable auto-commit
-  autoCommit: false
 });
 
 // Redis publisher configuration
@@ -35,6 +33,7 @@ async function consumeMessages() {
 
   // Consume messages
   await consumer.run({
+    autoCommit: false, // Disable auto-commit
     eachMessage: async ({ topic, partition, message }) => {
       console.log({topic,partition,key: message.key?.toString(),value: message.value?.toString(),offset: message.offset,});
 
