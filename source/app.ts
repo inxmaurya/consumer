@@ -18,6 +18,12 @@ const consumer = kafka.consumer({
   autoCommit: false
 });
 
+// Redis publisher configuration
+const redis = new Redis({
+  host: process.env.REDIS_HOST || 'localhost',
+  port: parseInt(process.env.REDIS_PORT || '6379'),
+});
+
 async function consumeMessages() {
   await consumer.connect();
   console.log('Consumer connected');
@@ -26,9 +32,6 @@ async function consumeMessages() {
 
   // Subscribe to the topic
   await consumer.subscribe({ topic, fromBeginning: true });
-
-  // Redis publisher configuration
-  const redis = new Redis();
 
   // Consume messages
   await consumer.run({
