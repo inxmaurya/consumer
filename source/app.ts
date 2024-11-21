@@ -1,4 +1,5 @@
 import { Kafka } from 'kafkajs';
+import { Redis } from 'ioredis';
 
 const kafka = new Kafka({
   clientId: 'my-consumer',
@@ -11,7 +12,11 @@ const kafka = new Kafka({
   sasl: undefined, // Set this if SASL is required.
 });
 
-const consumer = kafka.consumer({ groupId: 'test-group' });
+const consumer = kafka.consumer({
+  groupId: 'test-group',
+  // Disable auto-commit
+  autoCommit: false
+});
 
 async function consumeMessages() {
   await consumer.connect();
@@ -22,15 +27,27 @@ async function consumeMessages() {
   // Subscribe to the topic
   await consumer.subscribe({ topic, fromBeginning: true });
 
+  // Redis publisher configuration
+  const redis = new Redis();
+
   // Consume messages
   await consumer.run({
     eachMessage: async ({ topic, partition, message }) => {
-      console.log({
-        topic,
-        partition,
-        key: message.key?.toString(),
-        value: message.value?.toString(),
-      });
+      console.log({topic,partition,key: message.key?.toString(),value: message.value?.toString(),offset: message.offset,});
+
+      // Commit the offset after processing
+      await consumer.commitOffsets([
+        { topic, partition, offset: (parseInt(message.offset) + 1).toString() },
+      ]);
+
+      const key =  message.key?.toString();
+      const value =  message.value?.toString();
+      console.log('START-----Consumed message')
+      console.log(`MESSAGE: Key: ${key} - Value: ${value}`);
+      console.log('END-----Consumed message');
+      // Publish to Redis
+      redis.publish('test-channel', JSON.stringify({ channel: 'test-channel', datum: value, action: 'message' }));
+      console.log('Published message to Redis channel "test-channel"');
     },
   });
 }
@@ -38,4 +55,5 @@ async function consumeMessages() {
 consumeMessages().catch((err) => {
   console.error('Error in consumer:', err);
   consumer.disconnect();
+  redis.disconnect();
 });
