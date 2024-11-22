@@ -1,15 +1,34 @@
 import { Kafka } from 'kafkajs';
 import { Redis } from 'ioredis';
+import dotenv from 'dotenv';
+// Determine the environment and load the corresponding .env file
+const envFile = `.env.${process.env.NODE_ENV}`;
+// Load environment variables from .env file
+dotenv.config({path: envFile});
+
+const BROCKER_LISTS = [
+  process.env.FIRST_BROKER!,
+  process.env.SECOND_BROKER!,
+  process.env.THIRD_BROKER!,
+  process.env.FOURTH_BROKER!,
+  process.env.FIFTH_BROKER!,
+  process.env.SIXTH_BROKER!,
+];
+
+const CONFIGURATIONS = {
+  SSL: (process.env.SSL! === 'true'),
+  SASL: undefined
+};
+
+console.log("------------------------");
+console.log(BROCKER_LISTS);
+console.log("------------------------");
 
 const kafka = new Kafka({
   clientId: 'my-consumer',
-  brokers: [
-    'b-1.smc.4nooo6.c2.kafka.ap-south-1.amazonaws.com:9094',
-    'b-2.smc.4nooo6.c2.kafka.ap-south-1.amazonaws.com:9094',
-    'b-3.smc.4nooo6.c2.kafka.ap-south-1.amazonaws.com:9094',
-  ],
-  ssl: true,
-  sasl: undefined, // Set this if SASL is required.
+  brokers: BROCKER_LISTS,
+  ssl: CONFIGURATIONS['SSL'],
+  sasl: CONFIGURATIONS['SASL'], // Set this if SASL is required.
 });
 
 const consumer = kafka.consumer({
