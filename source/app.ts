@@ -29,7 +29,7 @@ const kafka = new Kafka({
   clientId: 'my-consumer',
   brokers: BROCKER_LISTS,
   ssl: CONFIGURATIONS.SSL,
-  sasl: CONFIGURATIONS.SASL,
+  sasl: undefined,
 });
 
 const consumer = kafka.consumer({
