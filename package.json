@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "start:dev": "npx tsc && npm run copy-env && NODE_ENV=development node ./build/app.js",
-    "start": "npx tsc && npm run copy-env && NODE_ENV=development node ./build/app.js",
+    "start": "npx tsc && npm run copy-env && NODE_ENV=production node ./build/app.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "copy-env": "cp .env* build/"
   },
