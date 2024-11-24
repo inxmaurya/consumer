@@ -22,6 +22,7 @@ const CONFIGURATIONS = {
 
 console.log("------------------------");
 console.log(BROCKER_LISTS);
+console.log(CONFIGURATIONS);
 console.log("------------------------");
 
 const kafka = new Kafka({
