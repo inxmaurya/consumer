@@ -1,10 +1,8 @@
 import { Kafka } from 'kafkajs';
 import { Redis } from 'ioredis';
 import dotenv from 'dotenv';
-// Determine the environment and load the corresponding .env file
-const envFile = `.env.${process.env.NODE_ENV}`;
-// Load environment variables from .env file
-dotenv.config({path: envFile});
+
+dotenv.config({ path: `.env.${process.env.NODE_ENV}` });
 
 const BROCKER_LISTS = [
   process.env.FIRST_BROKER!,
@@ -15,67 +13,99 @@ const BROCKER_LISTS = [
   process.env.SIXTH_BROKER!,
 ];
 
+if (!BROCKER_LISTS.every(Boolean)) {
+  throw new Error('One or more Kafka broker addresses are missing.');
+}
+
 const CONFIGURATIONS = {
-  SSL: (process.env.SSL! === 'true'),
-  SASL: undefined
+  SSL: process.env.SSL === 'true',
+  SASL: undefined, // Add SASL config here if required
 };
 
-console.log("------------------------");
-console.log(BROCKER_LISTS);
-console.log(CONFIGURATIONS);
-console.log("------------------------");
+console.log('Kafka Configuration:');
+console.log(BROCKER_LISTS, CONFIGURATIONS);
 
 const kafka = new Kafka({
   clientId: 'my-consumer',
   brokers: BROCKER_LISTS,
-  ssl: CONFIGURATIONS['SSL'],
-  sasl: CONFIGURATIONS['SASL'], // Set this if SASL is required.
+  ssl: CONFIGURATIONS.SSL,
+  sasl: CONFIGURATIONS.SASL,
 });
 
 const consumer = kafka.consumer({
   groupId: 'test-group',
 });
 
-// Redis publisher configuration
+// Redis client setup
 const redis = new Redis({
   host: process.env.REDIS_HOST || 'localhost',
   port: parseInt(process.env.REDIS_PORT || '6379'),
 });
 
+redis.on('error', (err) => {
+  console.error('Redis connection error:', err);
+});
+
+async function publishToRedis(channel: string, message: string, retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      await redis.publish(channel, message);
+      console.log(`Published message to Redis channel "${channel}"`);
+      return;
+    } catch (error) {
+      console.error('Redis publish error:', error);
+      if (i === retries - 1) {
+        console.error('Max retries reached. Message not published.');
+      } else {
+        console.log('Retrying...');
+      }
+    }
+  }
+}
+
 async function consumeMessages() {
-  await consumer.connect();
-  console.log('Consumer connected');
+  try {
+    await consumer.connect();
+    console.log('Consumer connected');
 
-  const topic = 'test-topic';
+    const topic = 'test-topic';
+    await consumer.subscribe({ topic, fromBeginning: true });
 
-  // Subscribe to the topic
-  await consumer.subscribe({ topic, fromBeginning: true });
+    await consumer.run({
+      autoCommit: false,
+      eachMessage: async ({ topic, partition, message }) => {
+        const key = message.key?.toString();
+        const value = message.value?.toString();
 
-  // Consume messages
-  await consumer.run({
-    autoCommit: false, // Disable auto-commit
-    eachMessage: async ({ topic, partition, message }) => {
-      console.log({topic,partition,key: message.key?.toString(),value: message.value?.toString(),offset: message.offset,});
+        console.log('Received message:', { topic, partition, key, value, offset: message.offset });
 
-      // Commit the offset after processing
-      await consumer.commitOffsets([
-        { topic, partition, offset: (parseInt(message.offset) + 1).toString() },
-      ]);
+        // Process and commit offset
+        try {
+          console.log('Processing message...');
+          await consumer.commitOffsets([{ topic, partition, offset: (parseInt(message.offset) + 1).toString() }]);
+          console.log('Offset committed');
+        } catch (error) {
+          console.error('Error committing offset:', error);
+        }
 
-      const key =  message.key?.toString();
-      const value =  message.value?.toString();
-      console.log('START-----Consumed message')
-      console.log(`MESSAGE: Key: ${key} - Value: ${value}`);
-      console.log('END-----Consumed message');
-      // Publish to Redis
-      redis.publish('test-channel', JSON.stringify({ channel: 'test-channel', datum: value, action: 'message' }));
-      console.log('Published message to Redis channel "test-channel"');
-    },
-  });
+        // Publish to Redis
+        await publishToRedis('test-channel', JSON.stringify({ channel: 'test-channel', datum: value, action: 'message' }));
+      },
+    });
+  } catch (err) {
+    console.error('Error in consumer:', err);
+  }
 }
 
 consumeMessages().catch((err) => {
-  console.error('Error in consumer:', err);
+  console.error('Fatal error in consumer:', err);
   consumer.disconnect();
   redis.disconnect();
+});
+
+process.on('SIGINT', async () => {
+  console.log('Interrupt signal received. Closing connections...');
+  await consumer.disconnect();
+  redis.disconnect();
+  process.exit(0);
 });
